@@ -1,0 +1,49 @@
+version: "3.9"
+
+# =============================================================
+# Luna Templates — docker-compose.yml para Portainer
+# =============================================================
+# Deploy:
+#  1. No Portainer, vá em Stacks → Add stack
+#  2. Cole este arquivo (ou aponte para o git repo)
+#  3. Preencha as variáveis de ambiente abaixo
+#  4. Deploy the stack
+# =============================================================
+
+services:
+  luna-templates:
+    # Opção A — build local (necessário código-fonte montado)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Opção B — se você publicar a imagem num registry, comente o build acima
+    # e descomente a linha abaixo:
+    # image: seu-registry/luna-templates:latest
+
+    container_name: luna-templates
+    restart: unless-stopped
+
+    ports:
+      - "${LUNA_PORT:-8080}:80"
+
+    environment:
+      # Credenciais Supabase (anon key — pode ir no frontend)
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    labels:
+      # Traefik (opcional — descomente se usar)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.luna.rule=Host(`luna.seudominio.com.br`)"
+      # - "traefik.http.routers.luna.entrypoints=websecure"
+      # - "traefik.http.routers.luna.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.luna.loadbalancer.server.port=80"
+      - "com.hprime.app=luna-templates"
+      - "com.hprime.version=1.0"
