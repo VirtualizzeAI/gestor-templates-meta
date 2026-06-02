@@ -1,0 +1,51 @@
+version: "3.9"
+
+# =============================================================
+# Luna Templates — docker-compose.yml para Portainer Stack
+# =============================================================
+# Deploy:
+#  1. No Portainer, vá em Stacks → Add stack
+#  2. Aponte para o git repo ou cole este arquivo
+#  3. Preencha as variáveis de ambiente no Portainer
+#  4. Deploy the stack
+# =============================================================
+
+services:
+  luna-templates:
+    image: ghcr.io/virtualizzeai/gestor-templates-meta:latest
+    # Se usar Docker Hub, troque para:
+    # image: virtualizzeai/gestor-templates-meta:latest
+
+    ports:
+      - "${LUNA_PORT:-8080}:80"
+
+    environment:
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 128M
+
+    labels:
+      - "com.hprime.app=luna-templates"
+      - "com.hprime.version=1.0"
+      # Traefik (opcional — descomente se usar)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.luna.rule=Host(`luna.seudominio.com.br`)"
+      # - "traefik.http.routers.luna.entrypoints=websecure"
+      # - "traefik.http.routers.luna.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.luna.loadbalancer.server.port=80"
