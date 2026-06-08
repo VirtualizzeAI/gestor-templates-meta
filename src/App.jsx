@@ -3,6 +3,7 @@ import { useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
 import TemplatesPage from './pages/TemplatesPage'
 import SettingsPage from './pages/SettingsPage'
+import ReportsPage from './pages/ReportsPage'
 import Layout from './components/Layout'
 import { Loader2 } from 'lucide-react'
 
@@ -53,8 +54,9 @@ export default function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/templates" replace />} />
+        <Route index element={<Navigate to="/reports" replace />} />
         <Route path="templates" element={<TemplatesPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

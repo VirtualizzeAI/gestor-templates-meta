@@ -108,3 +108,38 @@ create policy "Users can insert own actions"
   on public.template_actions
   for insert
   with check (auth.uid() = user_id);
+
+-- ============================================================
+-- Tabela de mensagens enviadas (relatórios)
+-- Registra cada disparo de template para um cliente
+-- ============================================================
+
+create table if not exists public.mensagens_enviadas (
+  id bigserial primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  nome_cliente text not null,
+  id_cliente text,
+  template_enviado text not null,
+  categoria text not null check (categoria in ('MARKETING', 'UTILITY', 'AUTHENTICATION')),
+  valor numeric(10, 2),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_mensagens_enviadas_user
+  on public.mensagens_enviadas(user_id, created_at desc);
+
+alter table public.mensagens_enviadas enable row level security;
+
+drop policy if exists "Users can read own mensagens"
+  on public.mensagens_enviadas;
+create policy "Users can read own mensagens"
+  on public.mensagens_enviadas
+  for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert own mensagens"
+  on public.mensagens_enviadas;
+create policy "Users can insert own mensagens"
+  on public.mensagens_enviadas
+  for insert
+  with check (auth.uid() = user_id);
