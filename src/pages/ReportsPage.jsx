@@ -14,6 +14,10 @@ const DATE_FILTERS = [
   { key: 'custom',  label: 'Selecionar período', icon: Calendar },
 ]
 
+function formatDateShort(date) {
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+}
+
 function getDateRange(filter, customStart, customEnd) {
   const now = new Date()
   const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -75,7 +79,7 @@ export default function ReportsPage() {
     try {
       const { data, error: fetchError } = await supabase
         .from('custos_meta')
-        .select('id, created_at, nome_cliente, nome_template, categoria, valor')
+        .select('id, created_at, nome_cliente, numero_cliente, nome_template, categoria, valor')
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
@@ -103,10 +107,17 @@ export default function ReportsPage() {
   const totalGastos        = filtered.reduce((acc, r) => acc + (parseFloat(r.valor) || 0), 0)
   const totalGastosFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalGastos)
 
+  const periodoLabel = useMemo(() => {
+    const range = getDateRange(dateFilter, customStart, customEnd)
+    if (!range) return ''
+    return `${formatDateShort(range.from)} - ${formatDateShort(range.to)}`
+  }, [dateFilter, customStart, customEnd])
+
   function getExportRows() {
     return filtered.map(r => ({
       Data: formatDate(r.created_at),
       Nome: r.nome_cliente || '-',
+      Telefone: r.numero_cliente ? String(r.numero_cliente) : '-',
       Template: r.nome_template || '-',
       Categoria: r.categoria || '-',
       Valor: r.valor != null ? parseFloat(r.valor) : '-',
@@ -114,25 +125,74 @@ export default function ReportsPage() {
   }
 
   function exportExcel() {
-    const ws = XLSX.utils.json_to_sheet(getExportRows())
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Relatório')
+
+    // Aba de resumo
+    const summaryData = [
+      ['Resumo do Relatório'],
+      ['Período', periodoLabel],
+      [],
+      ['Total de mensagens', filtered.length],
+      ['Total Marketing',    totalMarketing],
+      ['Total Utility',      totalUtility],
+      ['Total de gastos',    totalGastosFormatado],
+      [],
+      [`Exportado em: ${formatDate(new Date().toISOString())}`],
+    ]
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData)
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo')
+
+    // Aba de detalhes
+    const wsDetail = XLSX.utils.json_to_sheet(getExportRows())
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Detalhes')
+
     XLSX.writeFile(wb, `relatorio_luna_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   function exportPDF() {
     const doc = new jsPDF()
+    const dateStr = formatDate(new Date().toISOString())
+    const filename = `relatorio_luna_${new Date().toISOString().slice(0, 10)}.pdf`
+
+    // Título
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(14)
+    doc.setTextColor(30)
     doc.text('Relatório de Mensagens Enviadas', 14, 16)
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
+    doc.setFontSize(8)
     doc.setTextColor(120)
-    doc.text(`Exportado em ${formatDate(new Date().toISOString())}  ·  ${filtered.length} registro(s)`, 14, 23)
+    doc.text(`Exportado em ${dateStr}  ·  Período: ${periodoLabel}`, 14, 23)
+
+    // Tabela de resumo
     autoTable(doc, {
       startY: 28,
-      head: [['Data', 'Nome', 'Template', 'Categoria', 'Valor']],
-      body: getExportRows().map(r => [r.Data, r.Nome, r.Template, r.Categoria,
+      head: [['Resumo', 'Quantidade']],
+      body: [
+        ['Período',                      periodoLabel],
+        ['Total de mensagens enviadas',  String(filtered.length)],
+        ['Total Marketing',              String(totalMarketing)],
+        ['Total Utility',                String(totalUtility)],
+        ['Total de gastos',              totalGastosFormatado],
+      ],
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+      margin: { left: 14, right: 14 },
+      tableWidth: 90,
+    })
+
+    // Tabela de detalhes
+    const afterSummary = doc.lastAutoTable.finalY + 8
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(30)
+    doc.text('Detalhamento', 14, afterSummary)
+
+    autoTable(doc, {
+      startY: afterSummary + 4,
+      head: [['Data', 'Nome', 'Telefone', 'Template', 'Categoria', 'Valor']],
+      body: getExportRows().map(r => [r.Data, r.Nome, r.Telefone, r.Template, r.Categoria,
         typeof r.Valor === 'number'
           ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(r.Valor)
           : r.Valor
@@ -140,8 +200,10 @@ export default function ReportsPage() {
       styles: { fontSize: 8, cellPadding: 3 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [245, 247, 250] },
+      margin: { left: 14, right: 14 },
     })
-    doc.save(`relatorio_luna_${new Date().toISOString().slice(0, 10)}.pdf`)
+
+    doc.save(filename)
   }
 
   const customRangeReady = dateFilter === 'custom' && customStart && customEnd && customStart <= customEnd
@@ -236,6 +298,13 @@ export default function ReportsPage() {
             )}
           </div>
         )}
+
+        {/* Period label */}
+        {periodoLabel && (
+          <p className="font-mono text-[0.65rem] text-muted">
+            Período: <span className="text-text">{periodoLabel}</span>
+          </p>
+        )}
       </div>
 
       {/* Stats */}
@@ -263,6 +332,7 @@ export default function ReportsPage() {
             <tr>
               <th className="px-4 py-3 font-mono font-medium">Data</th>
               <th className="px-4 py-3 font-mono font-medium">Nome</th>
+              <th className="px-4 py-3 font-mono font-medium">Telefone</th>
               <th className="px-4 py-3 font-mono font-medium">Template</th>
               <th className="px-4 py-3 font-mono font-medium">Categoria</th>
               <th className="px-4 py-3 font-mono font-medium">Valor</th>
@@ -271,19 +341,19 @@ export default function ReportsPage() {
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center">
+                <td colSpan={6} className="px-4 py-12 text-center">
                   <Loader2 className="spin mx-auto text-accent2" size={28} />
                 </td>
               </tr>
             ) : dateFilter === 'custom' && !customRangeReady ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-muted font-mono text-xs">
+                <td colSpan={6} className="px-4 py-12 text-center text-muted font-mono text-xs">
                   Selecione o período de início e fim para visualizar os dados.
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-muted font-mono text-xs">
+                <td colSpan={6} className="px-4 py-12 text-center text-muted font-mono text-xs">
                   Nenhum registro no período selecionado.
                 </td>
               </tr>
@@ -294,6 +364,7 @@ export default function ReportsPage() {
                     {formatDate(row.created_at)}
                   </td>
                   <td className="px-4 py-3 text-sm">{row.nome_cliente || '-'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted">{row.numero_cliente || '-'}</td>
                   <td className="px-4 py-3 font-mono text-xs">{row.nome_template || '-'}</td>
                   <td className="px-4 py-3">
                     {row.categoria ? (
