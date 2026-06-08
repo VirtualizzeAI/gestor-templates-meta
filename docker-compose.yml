@@ -4,8 +4,8 @@ services:
   luna-templates:
     image: ghcr.io/virtualizzeai/gestor-templates-meta:latest
 
-    ports:
-      - "${LUNA_PORT:-8080}:80"
+    networks:
+      - BisnisNet
 
     environment:
       VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
@@ -20,7 +20,16 @@ services:
       resources:
         limits:
           memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.luna-templates.rule=Host(`luna.bisnsihub.cloud`)"
+        - "traefik.http.routers.luna-templates.entrypoints=websecure"
+        - "traefik.http.routers.luna-templates.tls.certresolver=letsencrypt"
+        - "traefik.http.services.luna-templates.loadbalancer.server.port=80"
+        - "com.hprime.app=luna-templates"
+        - "com.hprime.version=1.0"
 
-    labels:
-      - "com.hprime.app=luna-templates"
-      - "com.hprime.version=1.0"
+networks:
+  BisnisNet:
+    external: true
+    name: BisnisNet
